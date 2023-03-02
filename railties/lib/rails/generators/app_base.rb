@@ -506,9 +506,6 @@ module Rails
         # add databases: sqlite3, postgres, mysql
         packages += %w(pkg-config libpq-dev default-libmysqlclient-dev)
 
-        # add redis in case Action Cable, caching, or sidekiq are added later
-        packages << "redis"
-
         # ActiveStorage preview support
         packages << "libvips" unless skip_active_storage?
 
@@ -522,9 +519,9 @@ module Rails
           # Dockerhub.
           case Gem.ruby_version.to_s
           when /^2\.7/
-            bullseye = Gem.ruby_version >= "2.7.4"
+            bullseye = Gem.ruby_version >= Gem::Version.new("2.7.4")
           when /^3\.0/
-            bullseye = Gem.ruby_version >= "3.0.2"
+            bullseye = Gem.ruby_version >= Gem::Version.new("3.0.2")
           else
             bullseye = true
           end
@@ -543,19 +540,16 @@ module Rails
         # start with databases: sqlite3, postgres, mysql
         packages = %w(libsqlite3-0 postgresql-client default-mysql-client)
 
-        # add redis in case Action Cable, caching, or sidekiq are added later
-        packages << "redis"
-
         # ActiveStorage preview support
         packages << "libvips" unless skip_active_storage?
 
         packages.sort
       end
 
-      # CSS processors other than Tailwind require a node-based JavaScript environment. So overwrite the normal JS default
+      # CSS processors other than Tailwind and Sass require a node-based JavaScript environment. So overwrite the normal JS default
       # if one such processor has been specified.
       def adjusted_javascript_option
-        if options[:css] && options[:css] != "tailwind" && options[:javascript] == "importmap"
+        if options[:css] && options[:css] != "tailwind" && options[:css] != "sass" && options[:javascript] == "importmap"
           "esbuild"
         else
           options[:javascript]
@@ -567,6 +561,8 @@ module Rails
 
         if !using_node? && options[:css] == "tailwind"
           GemfileEntry.floats "tailwindcss-rails", "Use Tailwind CSS [https://github.com/rails/tailwindcss-rails]"
+        elsif !using_node? && options[:css] == "sass"
+          GemfileEntry.floats "dartsass-rails", "Use Dart SASS [https://github.com/rails/dartsass-rails]"
         else
           GemfileEntry.floats "cssbundling-rails", "Bundle and process CSS [https://github.com/rails/cssbundling-rails]"
         end
@@ -644,7 +640,19 @@ module Rails
       end
 
       def run_bundle
-        bundle_command("install", "BUNDLE_IGNORE_MESSAGES" => "1") if bundle_install?
+        if bundle_install?
+          bundle_command("install", "BUNDLE_IGNORE_MESSAGES" => "1")
+
+          # The vast majority of Rails apps will be deployed on `x86_64-linux`.
+          platforms = ["--add-platform=x86_64-linux"]
+
+          # Users that develop on M1 mac may use docker and would need `aarch64-linux` as well.
+          platforms << "--add-platform=aarch64-linux" if RUBY_PLATFORM.start_with?("arm64")
+
+          platforms.each do |platform|
+            bundle_command("lock #{platform}", "BUNDLE_IGNORE_MESSAGES" => "1")
+          end
+        end
       end
 
       def run_javascript
@@ -667,6 +675,8 @@ module Rails
 
         if !using_node? && options[:css] == "tailwind"
           rails_command "tailwindcss:install"
+        elsif !using_node? && options[:css] == "sass"
+          rails_command "dartsass:install"
         else
           rails_command "css:install:#{options[:css]}"
         end

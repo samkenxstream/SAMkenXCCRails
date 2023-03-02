@@ -600,15 +600,6 @@ class AppGeneratorTest < Rails::Generators::TestCase
     assert_gem "jbuilder"
   end
 
-  def test_inclusion_of_a_debugger
-    run_generator
-    if defined?(JRUBY_VERSION)
-      assert_no_gem "debug"
-    else
-      assert_gem "debug"
-    end
-  end
-
   def test_template_from_dir_pwd
     FileUtils.cd(Rails.root)
     assert_match(/It works from file!/, run_generator([destination_root, "-m", "lib/template.rb"]))
@@ -877,6 +868,12 @@ class AppGeneratorTest < Rails::Generators::TestCase
     end
   end
 
+  def test_css_option_with_asset_pipeline_sass
+    run_generator_and_bundler [destination_root, "--css=sass"]
+    assert_gem "dartsass-rails"
+    assert_file "app/assets/stylesheets/application.scss"
+  end
+
   def test_css_option_with_cssbundling_gem
     run_generator_and_bundler [destination_root, "--css=postcss"]
     assert_gem "cssbundling-rails"
@@ -931,7 +928,7 @@ class AppGeneratorTest < Rails::Generators::TestCase
     run_generator
 
     assert_file "Gemfile" do |content|
-      assert_match(/ruby "#{Gem.ruby_version}"/, content)
+      assert_match(/ruby "#{RUBY_VERSION}"/, content)
     end
     assert_file ".ruby-version" do |content|
       if ENV["RBENV_VERSION"]

@@ -659,6 +659,13 @@ module Arel
           }
         end
 
+        it "will only consider named binds starting with a letter" do
+          node = Nodes::BoundSqlLiteral.new("id = :0abc", [], { "0abc": 1 })
+          _(compile(node)).must_be_like %{
+            id = :0abc
+          }
+        end
+
         it "works with array values" do
           node = Nodes::BoundSqlLiteral.new("id IN (?)", [[1, 2, 3]], {})
           _(compile(node)).must_be_like %{
@@ -692,6 +699,29 @@ module Arel
           node = Nodes::BoundSqlLiteral.new("id = :id", [], { foo: 2, id: 1, bar: 3 })
           _(compile(node)).must_be_like %{
             id = ?
+          }
+        end
+
+        it "quotes nested arrays" do
+          # Two cases to exercise all branches.
+          # For real adapters, quoting arrays may fail in adapter-specific ways.
+
+          inner_literal = Nodes::BoundSqlLiteral.new("? * 2", [4], {})
+          node = Nodes::BoundSqlLiteral.new("id IN (?)", [[1, [2, 3], inner_literal]], {})
+          _(compile(node)).must_be_like %{
+            id IN (?, ?, ? * 2)
+          }
+
+          node = Nodes::BoundSqlLiteral.new("id IN (?)", [[1, [2, 3]]], {})
+          _(compile(node)).must_be_like %{
+            id IN (?, ?)
+          }
+        end
+
+        it "supports other bound literals as binds" do
+          node = Arel.sql("?", [1, 2, Arel.sql("?", 3)])
+          _(compile(node)).must_be_like %{
+            ?, ?, ?
           }
         end
       end
